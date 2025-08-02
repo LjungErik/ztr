@@ -1,7 +1,16 @@
 package port
 
 import (
+	"fmt"
+	"net"
+	"time"
+
+	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
+)
+
+const (
+	defaultTimeout = 5 * time.Second // seconds
 )
 
 var (
@@ -10,8 +19,9 @@ var (
 
 func Command() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "port",
-		Short: "Port command for scanning open ports on targets",
+		Use:   "port <target(s)>",
+		Short: "Port command for scanning open ports on targets (192.168.1.1, 10.0.0.0/24, 192.168.1.1;172.16.1.1, test.example.com)",
+		Args:  cobra.MinimumNArgs(1),
 		RunE:  exec,
 	}
 
@@ -19,6 +29,33 @@ func Command() *cobra.Command {
 }
 
 func exec(cmd *cobra.Command, args []string) error {
-	// Implement port scanning logic here
+	targetRange := target.Parse(args[0])
+	if len(targetRange) == 0 {
+		return fmt.Errorf("no valid targets provided")
+	}
+
+	for _, target := range targetRange {
+		scanTCPPorts(target, mostCommonPorts_1000)
+	}
+
 	return nil
+}
+
+func scanTCPPorts(target *net.IPAddr, ports []int) {
+	fmt.Printf("Scanning port (%d) for target: %s\n", len(ports), target)
+
+	// Here you would implement the actual port scanning logic.
+	// For demonstration, we will just print the most common ports.
+	for _, port := range ports {
+		addr := fmt.Sprintf("%s:%d", target.IP.String(), port)
+		conn, err := net.DialTimeout("tcp4", addr, defaultTimeout)
+		if err != nil {
+			fmt.Printf("Port %d is closed or filtered\n", port)
+			continue
+		}
+		conn.Close()
+		fmt.Printf("Port %d is open\n", port)
+	}
+
+	fmt.Printf("Finished scanning ports for target: %s\n", target)
 }
