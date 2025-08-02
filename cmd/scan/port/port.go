@@ -47,7 +47,7 @@ func scanTCPPorts(target *net.IPAddr, ports []int) {
 	// Here you would implement the actual port scanning logic.
 	// For demonstration, we will just print the most common ports.
 	for _, port := range ports {
-		addr := fmt.Sprintf("%s:%d", target.IP.String(), port)
+		addr := fmt.Sprintf("[%s]:%d", target.IP.String(), port)
 		conn, err := net.DialTimeout("tcp4", addr, defaultTimeout)
 		if err != nil {
 			fmt.Printf("Port %d is closed or filtered\n", port)
