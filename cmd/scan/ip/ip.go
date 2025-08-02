@@ -2,6 +2,7 @@ package ip
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/LjungErik/ztr/internal/target"
@@ -36,19 +37,19 @@ func exec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no valid targets provided")
 	}
 
+	timeout := defaultTimeout
+
 	for _, target := range targetRange {
-		if err := sendPing(target, defaultTimeout, defaultPingCount); err != nil {
-			return fmt.Errorf("failed to send ping to %s: %w", target, err)
-		}
+		sendPing(target, timeout, defaultPingCount)
 	}
 
 	return nil
 }
 
-func sendPing(target string, timeout time.Duration, pingCount int) error {
-	conn, err := icmp.ListenPacket("ip4:icmp", target)
+func sendPing(target *net.IPAddr, timeout time.Duration, pingCount int) {
+	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
-		return fmt.Errorf("failed to listen on target %s: %w", target, err)
+		fmt.Printf("failed to listen for ipv4 ICMP packets: %v\n", err)
 	}
 	defer conn.Close()
 
@@ -66,13 +67,14 @@ func sendPing(target string, timeout time.Duration, pingCount int) error {
 	}
 
 	if successCount == 0 {
-		return fmt.Errorf("all pings to %s failed", target)
+		fmt.Printf("all pings to %s failed\n", target)
+		return
 	}
 
-	return nil
+	fmt.Printf("Successfully pinged %s %d times\n", target, successCount)
 }
 
-func sendIPv4ICMPRequest(conn *icmp.PacketConn, target string) error {
+func sendIPv4ICMPRequest(conn *icmp.PacketConn, target *net.IPAddr) error {
 	wm := icmp.Message{
 		Type: ipv4.ICMPTypeEcho,
 		Code: 0,
@@ -88,7 +90,7 @@ func sendIPv4ICMPRequest(conn *icmp.PacketConn, target string) error {
 		return fmt.Errorf("failed to marshal ICMP message: %w", err)
 	}
 
-	if _, err := conn.WriteTo(wb, nil); err != nil {
+	if _, err := conn.WriteTo(wb, target); err != nil {
 		return fmt.Errorf("failed to send ICMP message to %s: %w", target, err)
 	}
 

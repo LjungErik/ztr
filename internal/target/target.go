@@ -1,22 +1,37 @@
 package target
 
 import (
+	"fmt"
 	"net"
 	"strings"
 )
 
-func Parse(target string) []string {
-	var ret []string
+func Parse(target string) []*net.IPAddr {
+	t := extractRange(target)
 
-	if strings.Contains(target, ";") {
-		ret = strings.Split(target, ";")
-	} else if strings.Contains(target, "/") {
-		ret = extractIPRange(target)
-	} else {
-		ret = []string{target}
+	ret := make([]*net.IPAddr, 0, len(t))
+	for _, addr := range t {
+		ip, err := net.ResolveIPAddr("ip", addr)
+		if err != nil {
+			fmt.Printf("Invalid target %s: %v\n", addr, err)
+
+			continue
+		}
+
+		ret = append(ret, ip)
 	}
 
-	return removeEmptyTargets(ret)
+	return ret
+}
+
+func extractRange(target string) []string {
+	if strings.Contains(target, ";") {
+		return strings.Split(target, ";")
+	} else if strings.Contains(target, "/") {
+		return extractIPRange(target)
+	} else {
+		return []string{target}
+	}
 }
 
 func extractIPRange(cidr string) []string {

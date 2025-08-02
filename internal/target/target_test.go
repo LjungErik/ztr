@@ -50,7 +50,7 @@ func Test_Parse(t *testing.T) {
 		t.Run(test.input, func(t *testing.T) {
 			t.Parallel()
 
-			result := Parse(test.input)
+			result := extractRange(test.input)
 
 			assert.Equal(t, test.expected, result)
 		})
