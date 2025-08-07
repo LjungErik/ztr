@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/icmp"
@@ -12,7 +13,7 @@ import (
 )
 
 const (
-	defaultTimeout   = 5 * time.Second
+	defaultTimeout   = 1 * time.Second
 	defaultPingCount = 3
 )
 
@@ -28,46 +29,63 @@ func Command() *cobra.Command {
 }
 
 func exec(cmd *cobra.Command, args []string) error {
-	targetRange := target.Parse(args[0])
-	if len(targetRange) == 0 {
+	targets := target.Parse(args[0])
+	if len(targets) == 0 {
 		return fmt.Errorf("no valid targets provided")
 	}
 
 	timeout := defaultTimeout
 
-	for _, target := range targetRange {
-		sendPing(target, timeout, defaultPingCount)
+	foundHosts := make([]*net.IPAddr, 0, len(targets))
+
+	for _, target := range targets {
+		success, err := sendPing(target, timeout, defaultPingCount)
+
+		if err != nil {
+			log.Errorf("failed to send ping to %s: %v\n", target, err)
+		} else if success {
+			foundHosts = append(foundHosts, target)
+		}
+	}
+
+	fmt.Println(" --- Found Hosts --- ")
+
+	for _, host := range foundHosts {
+		fmt.Printf(" * %s\n", host)
 	}
 
 	return nil
 }
 
-func sendPing(target *net.IPAddr, timeout time.Duration, pingCount int) {
+func sendPing(target *net.IPAddr, timeout time.Duration, pingCount int) (bool, error) {
 	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
-		fmt.Printf("failed to listen for ipv4 ICMP packets: %v\n", err)
+		return false, fmt.Errorf("field to setup icmp listener: %w", err)
 	}
 	defer conn.Close()
 
 	conn.SetDeadline(time.Now().Add(timeout))
 
-	successCount := 0
+	success := false
 
 	for i := 0; i < pingCount; i++ {
 		if err := sendIPv4ICMPRequest(conn, target); err != nil {
-			fmt.Printf("Ping to %s failed: %v\n", target, err)
+			log.Debugf("Ping to %s failed: %v\n", target, err)
 			continue
 		}
 
-		successCount++
+		success = true
+
+		break
 	}
 
-	if successCount == 0 {
-		fmt.Printf("all pings to %s failed\n", target)
-		return
+	if success {
+		return true, nil
 	}
 
-	fmt.Printf("Successfully pinged %s %d times\n", target, successCount)
+	log.Debugf("all pings to %s failed\n", target)
+
+	return false, nil
 }
 
 func sendIPv4ICMPRequest(conn *icmp.PacketConn, target *net.IPAddr) error {

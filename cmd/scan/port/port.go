@@ -3,8 +3,10 @@ package port
 import (
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
+	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
 )
@@ -35,27 +37,42 @@ func exec(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, target := range targetRange {
-		scanTCPPorts(target, mostCommonPorts_1000)
+		openPorts := scanTCPPorts(target, mostCommonPorts_1000)
+
+		if len(openPorts) > 0 {
+			fmt.Printf("Target: %s\n", target)
+			fmt.Printf("%d/%d ports identified\n", len(openPorts), len(mostCommonPorts_1000))
+			fmt.Printf("PORT\tSTATE\n")
+
+			for _, port := range openPorts {
+				fmt.Printf("%d/tcp\topen\n", port)
+			}
+		}
 	}
 
 	return nil
 }
 
-func scanTCPPorts(target *net.IPAddr, ports []int) {
+func scanTCPPorts(target *net.IPAddr, ports []int) []int {
 	fmt.Printf("Scanning port (%d) for target: %s\n", len(ports), target)
 
-	// Here you would implement the actual port scanning logic.
-	// For demonstration, we will just print the most common ports.
+	openPorts := make([]int, 0, len(ports))
+
 	for _, port := range ports {
 		addr := fmt.Sprintf("[%s]:%d", target.IP.String(), port)
 		conn, err := net.DialTimeout("tcp4", addr, defaultTimeout)
 		if err != nil {
-			fmt.Printf("Port %d is closed or filtered\n", port)
+			log.Debugf("Port %d is closed or filtered\n", port)
 			continue
 		}
 		conn.Close()
-		fmt.Printf("Port %d is open\n", port)
+
+		openPorts = append(openPorts, port)
 	}
 
-	fmt.Printf("Finished scanning ports for target: %s\n", target)
+	sort.Slice(openPorts, func(i, j int) bool {
+		return openPorts[i] < openPorts[j]
+	})
+
+	return openPorts
 }
