@@ -48,6 +48,8 @@ func exec(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Translate the found hosts into MAC and hostnames if needed
+
 	fmt.Println(" --- Found Hosts --- ")
 
 	for _, host := range foundHosts {
