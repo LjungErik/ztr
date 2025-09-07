@@ -40,16 +40,21 @@ func exec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get interfaces: %w", err)
 	}
 
-	if len(ifaces) == 0 {
+	if len(ifaces) < 2 {
 		return fmt.Errorf("no network interfaces found")
 	}
 
-	iface := ifaces[0]
+	iface := ifaces[1]
 	fmt.Printf("Using interface %s\n", iface.Name)
 
 	foundHosts, err := performARPScan(iface, targets)
 	if err != nil {
 		return fmt.Errorf("failed to perform ARP scan: %w", err)
+	}
+
+	if len(foundHosts) == 0 {
+		fmt.Println("No hosts found")
+		return nil
 	}
 
 	fmt.Println(" --- Found Hosts --- ")
@@ -65,8 +70,25 @@ func performARPScan(iface net.Interface, targets []*net.IPAddr) ([]network.Host,
 	nw := network.NewNetwork(iface)
 	defer nw.Close()
 
+	var ip net.IP
+	addrs, err := iface.Addrs()
+	if err != nil {
+		log.Errorf("failed to get interface addresses: %v", err)
+		return nil, fmt.Errorf("failed to get interface addresses: %w", err)
+	}
+
+	for _, addr := range addrs {
+		log.Debugf("Interface %s has address %s", iface.Name, addr.String())
+
+		ipNet, ok := addr.(*net.IPNet)
+		if ok && ipNet.IP.To4() != nil {
+			ip = ipNet.IP.To4()
+			break
+		}
+	}
+
 	arpFilter := arp.NewNetworkFilter(targets)
-	err := nw.InitializeCapture(arpFilter)
+	err = nw.InitializeCapture(arpFilter)
 	if err != nil {
 		log.Errorf("failed to initialize network capture: %v", err)
 		return nil, fmt.Errorf("failed to initialize network capture: %w", err)
@@ -77,7 +99,7 @@ func performARPScan(iface net.Interface, targets []*net.IPAddr) ([]network.Host,
 	go nw.Start(ctx)
 
 	for _, target := range targets {
-		arpReq := arp_req.NewARPRequest(nil, target, iface.HardwareAddr)
+		arpReq := arp_req.NewARPRequest(ip, target.IP.To4(), iface.HardwareAddr)
 
 		data, err := arpReq.Marshal()
 		if err != nil {
@@ -85,11 +107,17 @@ func performARPScan(iface net.Interface, targets []*net.IPAddr) ([]network.Host,
 			continue
 		}
 
+		log.Debugf("Sending ARP request for %s", target.String())
+
 		nw.Send(data)
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	// Wait for results or timeout of context
 	arpFilter.Wait(ctx)
+
+	log.Debugf("ARP scan complete, closing network capture")
 
 	cancel()
 

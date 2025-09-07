@@ -24,10 +24,11 @@ func NewNetworkFilter(targetIPs []*net.IPAddr) *ArpNetworkFilter {
 		targets:     sync.Map{},
 		found:       sync.Map{},
 		targetsLeft: atomic.Int32{},
+		finished:    make(chan struct{}),
 	}
 
 	for _, ip := range targetIPs {
-		nf.targets.Store(ip.IP, true)
+		nf.targets.Store(ip.IP.String(), true)
 	}
 
 	nf.targetsLeft.Store(int32(len(targetIPs)))
@@ -53,8 +54,8 @@ func (f *ArpNetworkFilter) handleArp(arp *layers.ARP) {
 	sourceIP := net.IP(arp.SourceProtAddress)
 
 	log.Debugf("Received ARP packet: %s is asking about %s", net.HardwareAddr(arp.SourceHwAddress), net.IP(arp.DstProtAddress))
-	if _, ok := f.targets.LoadAndDelete(sourceIP); ok {
-		f.found.Store(sourceIP, sourceHw)
+	if _, ok := f.targets.LoadAndDelete(sourceIP.String()); ok {
+		f.found.Store(sourceIP.String(), sourceHw)
 		n := f.targetsLeft.Add(-1)
 		log.Debugf("Targets left: %d", n)
 
@@ -76,8 +77,9 @@ func (f *ArpNetworkFilter) Wait(ctx context.Context) {
 func (f *ArpNetworkFilter) Results() []network.Host {
 	results := make([]network.Host, 0)
 	f.found.Range(func(key, value any) bool {
-		ip := key.(net.IP)
+		ipStr := key.(string)
 		hw := value.(net.HardwareAddr)
+		ip := net.ParseIP(ipStr)
 		results = append(results, network.Host{
 			IP:        &ip,
 			HwAddress: &hw,

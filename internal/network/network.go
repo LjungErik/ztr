@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/network/filter"
@@ -16,6 +17,7 @@ import (
 
 const (
 	maxOutgoing = 10
+	pcapTimeout = time.Millisecond * 100
 )
 
 type Network struct {
@@ -43,7 +45,7 @@ func (n *Network) InitializeCapture(filters ...filter.NetworkFilter) error {
 	n.outgoing = make(chan []byte, maxOutgoing)
 	n.filters = filters
 
-	n.handle, err = pcap.OpenLive(n.device, 1600, true, pcap.BlockForever)
+	n.handle, err = pcap.OpenLive(n.device, 1600, true, pcapTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to open interface for live capture: %w", err)
 	}
@@ -84,8 +86,10 @@ func (n *Network) Start(ctx context.Context) {
 }
 
 func (n *Network) Close() {
+	log.Debugf("closing network capture")
 	if n.handle != nil {
 		n.handle.Close()
+		log.Debugf("network capture closed")
 	}
 
 	n.handle = nil

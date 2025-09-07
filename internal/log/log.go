@@ -13,7 +13,7 @@ func (n *nopWriter) Write(p []byte) (int, error) {
 }
 
 var errorWriter io.Writer = os.Stderr
-var debugWriter io.Writer = &nopWriter{}
+var debugWriter io.Writer = os.Stdout
 
 func Errorf(format string, args ...interface{}) {
 	fmt.Fprintf(errorWriter, "ERROR: "+format+"\n", args...)

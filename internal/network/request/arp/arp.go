@@ -18,10 +18,10 @@ type ARPRequest struct {
 	SrcHwAddr net.HardwareAddr
 }
 
-func NewARPRequest(srcIP, target *net.IPAddr, srcHwAddr net.HardwareAddr) *ARPRequest {
+func NewARPRequest(srcIP, target net.IP, srcHwAddr net.HardwareAddr) *ARPRequest {
 	return &ARPRequest{
-		TargetIP:  target.IP,
-		SrcIP:     srcIP.IP,
+		TargetIP:  target,
+		SrcIP:     srcIP,
 		SrcHwAddr: srcHwAddr,
 	}
 }
