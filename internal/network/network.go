@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/LjungErik/ztr/internal/log"
+	"github.com/LjungErik/ztr/internal/network/filter"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
@@ -18,16 +20,11 @@ const (
 
 type Network struct {
 	handle   *pcap.Handle
-	filter   NetworkFilter
+	filters  []filter.NetworkFilter
 	outgoing chan []byte
 }
 
-type NetworkFilter interface {
-	GetBPF() string
-	CheckPacket(packet gopacket.Packet) error
-}
-
-func Initialize(iface net.Interface, filter NetworkFilter) (*Network, error) {
+func Initialize(iface net.Interface, filters ...filter.NetworkFilter) (*Network, error) {
 	var (
 		err error
 		n   *Network = &Network{}
@@ -40,15 +37,19 @@ func Initialize(iface net.Interface, filter NetworkFilter) (*Network, error) {
 		return nil, fmt.Errorf("failed to open interface for live capture: %w", err)
 	}
 
-	err = n.handle.SetBPFFilter(filter.GetBPF())
+	bpf := joinBPF(filters...)
+
+	log.Debugf("[%s] Setting up BPF filter: %s", iface.Name, bpf)
+
+	err = n.handle.SetBPFFilter(bpf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup network filter")
+		return nil, fmt.Errorf("failed to setup network filter: %w", err)
 	}
 
 	return n, nil
 }
 
-func (n *Network) StartCapture(ctx context.Context) {
+func (n *Network) Start(ctx context.Context) {
 	pktSource := gopacket.NewPacketSource(n.handle, n.handle.LinkType())
 
 	for {
@@ -58,9 +59,11 @@ func (n *Network) StartCapture(ctx context.Context) {
 				log.Errorf("failed to send packet data: %v", err)
 			}
 		case packet := <-pktSource.Packets():
-			err := n.filter.CheckPacket(packet)
-			if err != nil {
-				log.Errorf("failed to check package: %v", err)
+			for _, f := range n.filters {
+				err := f.RegisterPacket(packet)
+				if err != nil {
+					log.Errorf("failed to register packet: %v", err)
+				}
 			}
 		case <-ctx.Done():
 			log.Debugf("shutting down package capture")
@@ -71,4 +74,17 @@ func (n *Network) StartCapture(ctx context.Context) {
 
 func (n *Network) Close() {
 	n.handle.Close()
+}
+
+func (n *Network) Send(data []byte) {
+	n.outgoing <- data
+}
+
+func joinBPF(filters ...filter.NetworkFilter) string {
+	var bpf []string
+	for _, f := range filters {
+		bpf = append(bpf, f.GetBPF())
+	}
+
+	return strings.Join(bpf, " or ")
 }

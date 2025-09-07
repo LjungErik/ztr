@@ -56,13 +56,3 @@ func incIP(ip net.IP) {
 		}
 	}
 }
-
-func removeEmptyTargets(targets []string) []string {
-	var cleaned []string
-	for _, target := range targets {
-		if target != "" {
-			cleaned = append(cleaned, target)
-		}
-	}
-	return cleaned
-}
