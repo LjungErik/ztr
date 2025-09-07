@@ -22,31 +22,42 @@ type Network struct {
 	handle   *pcap.Handle
 	filters  []filter.NetworkFilter
 	outgoing chan []byte
+	device   string
 }
 
-func Initialize(iface net.Interface, filters ...filter.NetworkFilter) (*Network, error) {
+func NewNetwork(iface net.Interface) *Network {
+	return &Network{
+		device: iface.Name,
+	}
+}
+
+func (n *Network) InitializeCapture(filters ...filter.NetworkFilter) error {
 	var (
 		err error
-		n   *Network = &Network{}
 	)
 
-	n.outgoing = make(chan []byte, maxOutgoing)
+	if n.handle != nil {
+		return fmt.Errorf("network capture already initialized")
+	}
 
-	n.handle, err = pcap.OpenLive(iface.Name, 1600, true, pcap.BlockForever)
+	n.outgoing = make(chan []byte, maxOutgoing)
+	n.filters = filters
+
+	n.handle, err = pcap.OpenLive(n.device, 1600, true, pcap.BlockForever)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open interface for live capture: %w", err)
+		return fmt.Errorf("failed to open interface for live capture: %w", err)
 	}
 
 	bpf := joinBPF(filters...)
 
-	log.Debugf("[%s] Setting up BPF filter: %s", iface.Name, bpf)
+	log.Debugf("[%s] Setting up BPF filter: %s", n.device, bpf)
 
 	err = n.handle.SetBPFFilter(bpf)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup network filter: %w", err)
+		return fmt.Errorf("failed to setup network filter: %w", err)
 	}
 
-	return n, nil
+	return nil
 }
 
 func (n *Network) Start(ctx context.Context) {
@@ -73,7 +84,11 @@ func (n *Network) Start(ctx context.Context) {
 }
 
 func (n *Network) Close() {
-	n.handle.Close()
+	if n.handle != nil {
+		n.handle.Close()
+	}
+
+	n.handle = nil
 }
 
 func (n *Network) Send(data []byte) {

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/LjungErik/ztr/internal/log"
+	"github.com/LjungErik/ztr/internal/network"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 )
@@ -26,7 +27,7 @@ func NewNetworkFilter(targetIPs []*net.IPAddr) *ArpNetworkFilter {
 	}
 
 	for _, ip := range targetIPs {
-		nf.targets.Store(ip.String(), true)
+		nf.targets.Store(ip.IP, true)
 	}
 
 	nf.targetsLeft.Store(int32(len(targetIPs)))
@@ -52,8 +53,8 @@ func (f *ArpNetworkFilter) handleArp(arp *layers.ARP) {
 	sourceIP := net.IP(arp.SourceProtAddress)
 
 	log.Debugf("Received ARP packet: %s is asking about %s", net.HardwareAddr(arp.SourceHwAddress), net.IP(arp.DstProtAddress))
-	if _, ok := f.targets.LoadAndDelete(sourceIP.String()); ok {
-		f.found.Store(sourceIP.String(), sourceHw)
+	if _, ok := f.targets.LoadAndDelete(sourceIP); ok {
+		f.found.Store(sourceIP, sourceHw)
 		n := f.targetsLeft.Add(-1)
 		log.Debugf("Targets left: %d", n)
 
@@ -70,4 +71,21 @@ func (f *ArpNetworkFilter) Wait(ctx context.Context) {
 	case <-ctx.Done():
 		log.Debugf("Unabled to find all targets: %v", ctx.Err())
 	}
+}
+
+func (f *ArpNetworkFilter) Results() []network.Host {
+	results := make([]network.Host, 0)
+	f.found.Range(func(key, value any) bool {
+		ip := key.(net.IP)
+		hw := value.(net.HardwareAddr)
+		results = append(results, network.Host{
+			IP:        &ip,
+			HwAddress: &hw,
+			Hostname:  nil,
+		})
+
+		return true
+	})
+
+	return results
 }

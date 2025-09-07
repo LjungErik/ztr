@@ -1,20 +1,21 @@
 package ip
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/LjungErik/ztr/internal/log"
+	"github.com/LjungErik/ztr/internal/network"
+	"github.com/LjungErik/ztr/internal/network/filter/arp"
+	arp_req "github.com/LjungErik/ztr/internal/network/request/arp"
 	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
 )
 
 const (
-	defaultTimeout   = 1 * time.Second
-	defaultPingCount = 3
+	defaultTimeout = 30 * time.Second
 )
 
 func Command() *cobra.Command {
@@ -34,96 +35,63 @@ func exec(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no valid targets provided")
 	}
 
-	timeout := defaultTimeout
-
-	foundHosts := make([]*net.IPAddr, 0, len(targets))
-
-	for _, target := range targets {
-		success, err := sendPing(target, timeout, defaultPingCount)
-
-		if err != nil {
-			log.Errorf("failed to send ping to %s: %v\n", target, err)
-		} else if success {
-			foundHosts = append(foundHosts, target)
-		}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("failed to get interfaces: %w", err)
 	}
 
-	// Translate the found hosts into MAC and hostnames if needed
+	if len(ifaces) == 0 {
+		return fmt.Errorf("no network interfaces found")
+	}
+
+	iface := ifaces[0]
+	fmt.Printf("Using interface %s\n", iface.Name)
+
+	foundHosts, err := performARPScan(iface, targets)
+	if err != nil {
+		return fmt.Errorf("failed to perform ARP scan: %w", err)
+	}
 
 	fmt.Println(" --- Found Hosts --- ")
 
 	for _, host := range foundHosts {
-		fmt.Printf(" * %s\n", host)
+		fmt.Printf(" - %s\n", host)
 	}
 
 	return nil
 }
 
-func sendPing(target *net.IPAddr, timeout time.Duration, pingCount int) (bool, error) {
-	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
+func performARPScan(iface net.Interface, targets []*net.IPAddr) ([]network.Host, error) {
+	nw := network.NewNetwork(iface)
+	defer nw.Close()
+
+	arpFilter := arp.NewNetworkFilter(targets)
+	err := nw.InitializeCapture(arpFilter)
 	if err != nil {
-		return false, fmt.Errorf("field to setup icmp listener: %w", err)
+		log.Errorf("failed to initialize network capture: %v", err)
+		return nil, fmt.Errorf("failed to initialize network capture: %w", err)
 	}
-	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(timeout))
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 
-	success := false
+	go nw.Start(ctx)
 
-	for i := 0; i < pingCount; i++ {
-		if err := sendIPv4ICMPRequest(conn, target); err != nil {
-			log.Debugf("Ping to %s failed: %v\n", target, err)
+	for _, target := range targets {
+		arpReq := arp_req.NewARPRequest(nil, target, iface.HardwareAddr)
+
+		data, err := arpReq.Marshal()
+		if err != nil {
+			log.Errorf("failed to marshal ARP request: %v", err)
 			continue
 		}
 
-		success = true
-
-		break
+		nw.Send(data)
 	}
 
-	if success {
-		return true, nil
-	}
+	// Wait for results or timeout of context
+	arpFilter.Wait(ctx)
 
-	log.Debugf("all pings to %s failed\n", target)
+	cancel()
 
-	return false, nil
-}
-
-func sendIPv4ICMPRequest(conn *icmp.PacketConn, target *net.IPAddr) error {
-	wm := icmp.Message{
-		Type: ipv4.ICMPTypeEcho,
-		Code: 0,
-		Body: &icmp.Echo{
-			ID:   1,
-			Seq:  1,
-			Data: []byte("ping"),
-		},
-	}
-
-	wb, err := wm.Marshal(nil)
-	if err != nil {
-		return fmt.Errorf("failed to marshal ICMP message: %w", err)
-	}
-
-	if _, err := conn.WriteTo(wb, target); err != nil {
-		return fmt.Errorf("failed to send ICMP message to %s: %w", target, err)
-	}
-
-	rb := make([]byte, 1500)
-	n, peer, err := conn.ReadFrom(rb)
-	if err != nil {
-		return fmt.Errorf("failed to read ICMP response: %w", err)
-	}
-
-	rm, err := icmp.ParseMessage(ipv4.ICMPTypeEchoReply.Protocol(), rb[:n])
-	if err != nil {
-		return fmt.Errorf("failed to parse ICMP response: %w", err)
-	}
-
-	if rm.Type != ipv4.ICMPTypeEchoReply {
-		return fmt.Errorf("received non-echo reply from %s: %v", peer, rm.Type)
-	}
-
-	return nil
+	return arpFilter.Results(), nil
 }
