@@ -1,0 +1,76 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0" version="28.2.1">
+  <diagram name="Page-1" id="E8-OLAHcR0bJwZ1QLtbF">
+    <mxGraphModel dx="3117" dy="1275" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-1" target="ThP1wO_oMD2ZlEkIRo7K-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-1" target="ThP1wO_oMD2ZlEkIRo7K-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-1" value="Network" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-85" y="620" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-2" target="ThP1wO_oMD2ZlEkIRo7K-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-2" value="Interface" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-215" y="630" width="80" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-4" value="PCAP" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-85" y="740" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-6" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-105" y="490" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-7" target="ThP1wO_oMD2ZlEkIRo7K-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-7" target="ThP1wO_oMD2ZlEkIRo7K-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-7" value="&lt;div&gt;PCAP-Packet&lt;/div&gt;" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="115" y="740" width="90" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-10" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-95" y="500" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-11" value="Network Filters" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-85" y="510" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-13" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Network Filters&lt;/h1&gt;&lt;p&gt;Handles and checks for a specific type of packet and forwards this to a service&lt;br&gt;&lt;br&gt;Exposes a channel to allow other services to get notified when packages matching the filter are received&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="-315" y="390" width="180" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-14" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Network&lt;/h1&gt;&lt;p&gt;Handles the setup of capture on PCAP and forwards received packages to the correct network filter. Also uses the network filter to sett a&lt;b&gt; BPF filter&lt;/b&gt;. Each network as a associated &lt;b&gt;interface&lt;/b&gt; used for selecting which interface to use pcap filtering on.&lt;br&gt;&lt;br&gt;Exposes method for registering new filters and sending binary package data over pcap.&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="-425" y="610" width="180" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-15" target="ThP1wO_oMD2ZlEkIRo7K-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-15" target="ThP1wO_oMD2ZlEkIRo7K-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="ThP1wO_oMD2ZlEkIRo7K-15" target="ThP1wO_oMD2ZlEkIRo7K-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-15" value="Network Scanner" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="510" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-17" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Network Scanner&lt;/h1&gt;&lt;p&gt;Performs actual network scans based on provided targets. Retries sending network packages and tracks the progress based on a state machine setup.&lt;br&gt;&lt;br&gt;Responsible for registering the needed network filters with the network&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="285" y="470" width="210" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-19" value="Network Packets" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="350" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-21" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Network Packets&lt;/h1&gt;&lt;p&gt;Abstraction layer on top of PCAP-Packet to make it easier to define packet and marshal them into binary representation.&lt;br&gt;&lt;br&gt;Used by network scanner to define the relevant packets that need to be sent.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="285" y="260" width="210" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="ThP1wO_oMD2ZlEkIRo7K-22" value="&lt;font style=&quot;font-size: 42px;&quot;&gt;&lt;b&gt;Zetra&lt;br&gt;&lt;/b&gt;&lt;i&gt;Network Scanning Tool&lt;/i&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="-150" y="30" width="350" height="160" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
