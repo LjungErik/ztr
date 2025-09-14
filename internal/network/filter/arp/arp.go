@@ -1,93 +1,33 @@
 package arp
 
 import (
-	"context"
-	"net"
-	"sync"
-	"sync/atomic"
-
-	"github.com/LjungErik/ztr/internal/log"
-	"github.com/LjungErik/ztr/internal/network"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 )
 
-type ArpNetworkFilter struct {
-	targets     sync.Map
-	found       sync.Map
-	targetsLeft atomic.Int32
-	finished    chan struct{}
+type ARPNetworkFilter struct {
+	handler ARPHandler
 }
 
-func NewNetworkFilter(targetIPs []*net.IPAddr) *ArpNetworkFilter {
-	nf := &ArpNetworkFilter{
-		targets:     sync.Map{},
-		found:       sync.Map{},
-		targetsLeft: atomic.Int32{},
-		finished:    make(chan struct{}),
-	}
-
-	for _, ip := range targetIPs {
-		nf.targets.Store(ip.IP.String(), true)
-	}
-
-	nf.targetsLeft.Store(int32(len(targetIPs)))
-
-	return nf
+type ARPHandler interface {
+	Handle(resp *layers.ARP)
 }
 
-func (f *ArpNetworkFilter) GetBPF() string {
+func NewNetworkFilter(handler ARPHandler) *ARPNetworkFilter {
+	return &ARPNetworkFilter{
+		handler: handler,
+	}
+}
+
+func (f *ARPNetworkFilter) GetBPF() string {
 	return "arp"
 }
 
-func (f *ArpNetworkFilter) RegisterPacket(packet gopacket.Packet) error {
+func (f *ARPNetworkFilter) RegisterPacket(packet gopacket.Packet) error {
 	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
 		arp := arpLayer.(*layers.ARP)
-		go f.handleArp(arp)
+		f.handler.Handle(arp)
 	}
 
 	return nil
-}
-
-func (f *ArpNetworkFilter) handleArp(arp *layers.ARP) {
-	sourceHw := net.HardwareAddr(arp.SourceHwAddress)
-	sourceIP := net.IP(arp.SourceProtAddress)
-
-	log.Debugf("Received ARP packet: %s is asking about %s", net.HardwareAddr(arp.SourceHwAddress), net.IP(arp.DstProtAddress))
-	if _, ok := f.targets.LoadAndDelete(sourceIP.String()); ok {
-		f.found.Store(sourceIP.String(), sourceHw)
-		n := f.targetsLeft.Add(-1)
-		log.Debugf("Targets left: %d", n)
-
-		if n == 0 {
-			close(f.finished)
-		}
-	}
-}
-
-func (f *ArpNetworkFilter) Wait(ctx context.Context) {
-	select {
-	case <-f.finished:
-		log.Debugf("All targets found")
-	case <-ctx.Done():
-		log.Debugf("Unabled to find all targets: %v", ctx.Err())
-	}
-}
-
-func (f *ArpNetworkFilter) Results() []network.Host {
-	results := make([]network.Host, 0)
-	f.found.Range(func(key, value any) bool {
-		ipStr := key.(string)
-		hw := value.(net.HardwareAddr)
-		ip := net.ParseIP(ipStr)
-		results = append(results, network.Host{
-			IP:        &ip,
-			HwAddress: &hw,
-			Hostname:  nil,
-		})
-
-		return true
-	})
-
-	return results
 }

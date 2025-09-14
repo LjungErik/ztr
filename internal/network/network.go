@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -20,49 +19,66 @@ const (
 	pcapTimeout = time.Millisecond * 100
 )
 
-type Network struct {
+type Network interface {
+	RegisterFilter(f filter.NetworkFilter)
+	StartCapture(ctx context.Context)
+	Close()
+	Send(data []byte)
+}
+
+type network struct {
 	handle   *pcap.Handle
 	filters  []filter.NetworkFilter
 	outgoing chan []byte
-	device   string
+	iface    NetworkInterface
 }
 
-func NewNetwork(iface net.Interface) *Network {
-	return &Network{
-		device: iface.Name,
+func NewNetwork(iface net.Interface) *network {
+	return &network{
+		iface:    NetworkInterface{iface},
+		outgoing: make(chan []byte, maxOutgoing),
+		filters:  []filter.NetworkFilter{},
+		handle:   nil,
 	}
 }
 
-func (n *Network) InitializeCapture(filters ...filter.NetworkFilter) error {
+func (n *network) RegisterFilter(f filter.NetworkFilter) {
+	n.filters = append(n.filters, f)
+}
+
+func (n *network) StartCapture(ctx context.Context) {
 	var (
 		err error
 	)
 
 	if n.handle != nil {
-		return fmt.Errorf("network capture already initialized")
+		log.Debugf("network capture already started")
+
+		return
 	}
 
-	n.outgoing = make(chan []byte, maxOutgoing)
-	n.filters = filters
-
-	n.handle, err = pcap.OpenLive(n.device, 1600, true, pcapTimeout)
+	n.handle, err = pcap.OpenLive(n.iface.Name, 1600, true, pcapTimeout)
 	if err != nil {
-		return fmt.Errorf("failed to open interface for live capture: %w", err)
+		log.Errorf("failed to open interface for live capture: %v", err)
+
+		return
 	}
 
-	bpf := joinBPF(filters...)
+	bpf := joinBPF(n.filters...)
 
-	log.Debugf("[%s] Setting up BPF filter: %s", n.device, bpf)
+	log.Debugf("[%s] Setting up BPF filter: %s", n.iface.Name, bpf)
 
 	err = n.handle.SetBPFFilter(bpf)
 	if err != nil {
-		return fmt.Errorf("failed to setup network filter: %w", err)
+		log.Errorf("failed to setup network filter: %v", err)
+
+		return
 	}
 
-	return nil
+	n.start(ctx)
 }
 
-func (n *Network) Start(ctx context.Context) {
+func (n *network) start(ctx context.Context) {
 	pktSource := gopacket.NewPacketSource(n.handle, n.handle.LinkType())
 
 	for {
@@ -85,7 +101,7 @@ func (n *Network) Start(ctx context.Context) {
 	}
 }
 
-func (n *Network) Close() {
+func (n *network) Close() {
 	log.Debugf("closing network capture")
 	if n.handle != nil {
 		n.handle.Close()
@@ -95,7 +111,7 @@ func (n *Network) Close() {
 	n.handle = nil
 }
 
-func (n *Network) Send(data []byte) {
+func (n *network) Send(data []byte) {
 	n.outgoing <- data
 }
 
