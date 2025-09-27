@@ -16,7 +16,11 @@ type NetworkInterface struct {
 	net.Interface
 }
 
-func (n NetworkInterface) GetIPv4() (net.IP, error) {
+func NewNetworkInterface(iface net.Interface) *NetworkInterface {
+	return &NetworkInterface{iface}
+}
+
+func (n *NetworkInterface) GetIPv4() (net.IP, error) {
 	addrs, err := n.Addrs()
 	if err != nil {
 		log.Errorf("failed to get interface addresses: %v", err)
@@ -35,6 +39,6 @@ func (n NetworkInterface) GetIPv4() (net.IP, error) {
 	return nil, ErrIPv4NotFound
 }
 
-func (n NetworkInterface) GetHwAddress() net.HardwareAddr {
+func (n *NetworkInterface) GetHwAddress() net.HardwareAddr {
 	return n.HardwareAddr
 }

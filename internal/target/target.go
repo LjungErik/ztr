@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-func Parse(target string) []*net.IPAddr {
+func Parse(target string) []net.IP {
 	t := extractRange(target)
 
-	ret := make([]*net.IPAddr, 0, len(t))
+	ret := make([]net.IP, 0, len(t))
 	for _, addr := range t {
 		ip, err := net.ResolveIPAddr("ip", addr)
 		if err != nil {
@@ -18,10 +18,21 @@ func Parse(target string) []*net.IPAddr {
 			continue
 		}
 
-		ret = append(ret, ip)
+		ret = append(ret, ip.IP)
 	}
 
 	return ret
+}
+
+func ParseIPv4(target string) []net.IP {
+	var ips []net.IP
+	for _, ip := range Parse(target) {
+		ipv4 := ip.To4()
+		if ipv4 != nil {
+			ips = append(ips, ipv4)
+		}
+	}
+	return ips
 }
 
 func extractRange(target string) []string {

@@ -4,18 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
-	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/network"
-	"github.com/LjungErik/ztr/internal/network/filter/arp"
-	arp_req "github.com/LjungErik/ztr/internal/network/request/arp"
+	arp_scan "github.com/LjungErik/ztr/internal/network/scanner/arp"
 	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
 )
 
 const (
-	defaultTimeout = 30 * time.Second
+	defaultTimeout = 300 * time.Second
 )
 
 func Command() *cobra.Command {
@@ -30,7 +29,7 @@ func Command() *cobra.Command {
 }
 
 func exec(cmd *cobra.Command, args []string) error {
-	targets := target.Parse(args[0])
+	targets := target.ParseIPv4(args[0])
 	if len(targets) == 0 {
 		return fmt.Errorf("no valid targets provided")
 	}
@@ -47,9 +46,21 @@ func exec(cmd *cobra.Command, args []string) error {
 	iface := ifaces[1]
 	fmt.Printf("Using interface %s\n", iface.Name)
 
-	foundHosts, err := performARPScan(iface, targets)
+	netFace := network.NewNetworkInterface(iface)
+
+	nw := network.NewNetwork(netFace)
+	defer nw.Close()
+
+	scanner, err := arp_scan.NewARPScanner(nw, netFace, targets)
 	if err != nil {
-		return fmt.Errorf("failed to perform ARP scan: %w", err)
+		return fmt.Errorf("failed to create ARP scanner: %w", err)
+	}
+
+	wg := &sync.WaitGroup{}
+
+	foundHosts, err := startScan(nw, scanner, wg)
+	if err != nil {
+		return fmt.Errorf("failed to start ARP scan: %w", err)
 	}
 
 	if len(foundHosts) == 0 {
@@ -58,68 +69,32 @@ func exec(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println(" --- Found Hosts --- ")
+	fmt.Printf("Found %d hosts out of %d:\n", len(foundHosts), len(targets))
 
 	for _, host := range foundHosts {
 		fmt.Printf(" - %s\n", host)
 	}
 
+	wg.Wait()
+
 	return nil
 }
 
-func performARPScan(iface net.Interface, targets []*net.IPAddr) ([]network.Host, error) {
-	nw := network.NewNetwork(iface)
-	defer nw.Close()
-
-	var ip net.IP
-	addrs, err := iface.Addrs()
-	if err != nil {
-		log.Errorf("failed to get interface addresses: %v", err)
-		return nil, fmt.Errorf("failed to get interface addresses: %w", err)
-	}
-
-	for _, addr := range addrs {
-		log.Debugf("Interface %s has address %s", iface.Name, addr.String())
-
-		ipNet, ok := addr.(*net.IPNet)
-		if ok && ipNet.IP.To4() != nil {
-			ip = ipNet.IP.To4()
-			break
-		}
-	}
-
-	arpFilter := arp.NewNetworkFilter(targets)
-	err = nw.InitializeCapture(arpFilter)
-	if err != nil {
-		log.Errorf("failed to initialize network capture: %v", err)
-		return nil, fmt.Errorf("failed to initialize network capture: %w", err)
-	}
-
+func startScan(nw network.Network, scanner *arp_scan.ARPScanner, wg *sync.WaitGroup) ([]network.Host, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
 
-	go nw.Start(ctx)
+	wg.Add(1)
 
-	for _, target := range targets {
-		arpReq := arp_req.NewARPRequest(ip, target.IP.To4(), iface.HardwareAddr)
+	go func() {
+		defer wg.Done()
+		nw.StartCapture(ctx)
+	}()
 
-		data, err := arpReq.Marshal()
-		if err != nil {
-			log.Errorf("failed to marshal ARP request: %v", err)
-			continue
-		}
-
-		log.Debugf("Sending ARP request for %s", target.String())
-
-		nw.Send(data)
-
-		time.Sleep(100 * time.Millisecond)
+	results, err := scanner.Run(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run ARP scanner: %w", err)
 	}
 
-	// Wait for results or timeout of context
-	arpFilter.Wait(ctx)
-
-	log.Debugf("ARP scan complete, closing network capture")
-
-	cancel()
-
-	return arpFilter.Results(), nil
+	return results, nil
 }

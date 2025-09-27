@@ -53,13 +53,13 @@ func exec(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func scanTCPPorts(target *net.IPAddr, ports []int) []int {
+func scanTCPPorts(target net.IP, ports []int) []int {
 	fmt.Printf("Scanning port (%d) for target: %s\n", len(ports), target)
 
 	openPorts := make([]int, 0, len(ports))
 
 	for _, port := range ports {
-		addr := fmt.Sprintf("[%s]:%d", target.IP.String(), port)
+		addr := fmt.Sprintf("[%s]:%d", target.String(), port)
 		conn, err := net.DialTimeout("tcp4", addr, defaultTimeout)
 		if err != nil {
 			log.Debugf("Port %d is closed or filtered\n", port)

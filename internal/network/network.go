@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"net"
 	"strings"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 
 const (
 	maxOutgoing = 10
-	pcapTimeout = time.Millisecond * 100
+	pcapTimeout = time.Millisecond * 10
 )
 
 type Network interface {
@@ -30,12 +29,12 @@ type network struct {
 	handle   *pcap.Handle
 	filters  []filter.NetworkFilter
 	outgoing chan []byte
-	iface    NetworkInterface
+	iface    *NetworkInterface
 }
 
-func NewNetwork(iface net.Interface) *network {
+func NewNetwork(iface *NetworkInterface) *network {
 	return &network{
-		iface:    NetworkInterface{iface},
+		iface:    iface,
 		outgoing: make(chan []byte, maxOutgoing),
 		filters:  []filter.NetworkFilter{},
 		handle:   nil,
