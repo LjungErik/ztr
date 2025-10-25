@@ -1,7 +1,7 @@
 package network
 
 import (
-	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,38 +14,40 @@ import (
 // Struct for handling the underlying network packet parsing
 
 const (
-	maxOutgoing = 10
 	pcapTimeout = time.Millisecond * 10
 )
 
+var _ Network = (*network)(nil)
+
 type Network interface {
 	RegisterFilter(f filter.NetworkFilter)
-	StartCapture(ctx context.Context)
+	StartCapture()
 	Close()
-	Send(data []byte)
+	ProcessNextPacket()
+	Send(data []byte) error
+	NetworkInterface() *NetworkInterface
+	GetFilter(filterType string) (filter.NetworkFilter, bool)
 }
 
 type network struct {
-	handle   *pcap.Handle
-	filters  []filter.NetworkFilter
-	outgoing chan []byte
-	iface    *NetworkInterface
+	handle  *pcap.Handle
+	filters map[string]filter.NetworkFilter
+	iface   *NetworkInterface
 }
 
 func NewNetwork(iface *NetworkInterface) *network {
 	return &network{
-		iface:    iface,
-		outgoing: make(chan []byte, maxOutgoing),
-		filters:  []filter.NetworkFilter{},
-		handle:   nil,
+		iface:   iface,
+		filters: make(map[string]filter.NetworkFilter),
+		handle:  nil,
 	}
 }
 
 func (n *network) RegisterFilter(f filter.NetworkFilter) {
-	n.filters = append(n.filters, f)
+	n.filters[f.GetType()] = f
 }
 
-func (n *network) StartCapture(ctx context.Context) {
+func (n *network) StartCapture() {
 	var (
 		err error
 	)
@@ -63,7 +65,7 @@ func (n *network) StartCapture(ctx context.Context) {
 		return
 	}
 
-	bpf := joinBPF(n.filters...)
+	bpf := joinBPF(n.filters)
 
 	log.Debugf("[%s] Setting up BPF filter: %s", n.iface.Name, bpf)
 
@@ -73,30 +75,21 @@ func (n *network) StartCapture(ctx context.Context) {
 
 		return
 	}
-
-	n.start(ctx)
 }
 
-func (n *network) start(ctx context.Context) {
-	pktSource := gopacket.NewPacketSource(n.handle, n.handle.LinkType())
+func (n *network) ProcessNextPacket() {
+	raw, ci, err := n.handle.ReadPacketData()
+	if err != nil {
+		log.Errorf("failed to read packet data: %v", err)
+	}
 
-	for {
-		select {
-		case data := <-n.outgoing:
-			if err := n.handle.WritePacketData(data); err != nil {
-				log.Errorf("failed to send packet data: %v", err)
-			}
-		case packet := <-pktSource.Packets():
-			for _, f := range n.filters {
-				err := f.RegisterPacket(packet)
-				if err != nil {
-					log.Errorf("failed to register packet: %v", err)
-				}
-			}
-		case <-ctx.Done():
-			log.Debugf("shutting down package capture")
-			return
-		}
+	packet := gopacket.NewPacket(raw, n.handle.LinkType(), gopacket.Default)
+	m := packet.Metadata()
+	m.CaptureInfo = ci
+	m.Truncated = m.Truncated || ci.CaptureLength < ci.Length
+
+	for _, f := range n.filters {
+		f.RegisterPacket(packet)
 	}
 }
 
@@ -110,11 +103,29 @@ func (n *network) Close() {
 	n.handle = nil
 }
 
-func (n *network) Send(data []byte) {
-	n.outgoing <- data
+func (n *network) Send(data []byte) error {
+	if n.handle == nil {
+		return fmt.Errorf("network capture not started")
+	}
+
+	err := n.handle.WritePacketData(data)
+	if err != nil {
+		return fmt.Errorf("failed to send packet data: %w", err)
+	}
+
+	return nil
 }
 
-func joinBPF(filters ...filter.NetworkFilter) string {
+func (n *network) NetworkInterface() *NetworkInterface {
+	return n.iface
+}
+
+func (n *network) GetFilter(filterType string) (filter.NetworkFilter, bool) {
+	f, ok := n.filters[filterType]
+	return f, ok
+}
+
+func joinBPF(filters map[string]filter.NetworkFilter) string {
 	var bpf []string
 	for _, f := range filters {
 		bpf = append(bpf, f.GetBPF())

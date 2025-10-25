@@ -51,7 +51,7 @@ func exec(cmd *cobra.Command, args []string) error {
 	nw := network.NewNetwork(netFace)
 	defer nw.Close()
 
-	scanner, err := arp_scan.NewARPScanner(nw, netFace, targets)
+	scanner, err := arp_scan.NewARPScanner(nw, targets)
 	if err != nil {
 		return fmt.Errorf("failed to create ARP scanner: %w", err)
 	}

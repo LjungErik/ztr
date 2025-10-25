@@ -3,7 +3,6 @@ package arp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"time"
 
@@ -44,7 +43,7 @@ type ARPScanResults struct {
 	NotFound []*net.IP
 }
 
-func NewARPScanner(net network.Network, iface *network.NetworkInterface, targets []net.IP) (*ARPScanner, error) {
+func NewARPScanner(net network.Network, targets []net.IP) (*ARPScanner, error) {
 	s := &ARPScanner{
 		network:            net,
 		reciever:           make(chan *layers.ARP),
@@ -61,12 +60,9 @@ func NewARPScanner(net network.Network, iface *network.NetworkInterface, targets
 		s.targetsRetriesLeft[target.String()] = defaultMaxRetries
 	}
 
-	ip, err := iface.GetIPv4()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get interface IPv4 address: %v", err)
-	}
+	iface := s.network.NetworkInterface()
 
-	s.sourceIPv4 = ip
+	s.sourceIPv4 = iface.GetIPv4()
 	s.sourceHwAddr = iface.GetHwAddress()
 
 	return s, nil
