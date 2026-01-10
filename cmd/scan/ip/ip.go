@@ -1,16 +1,18 @@
 package ip
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
-	"github.com/LjungErik/ztr/internal/network"
-	arp_scan "github.com/LjungErik/ztr/internal/network/scanner/arp"
 	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
+)
+
+var (
+	ErrNoTargetProvided  = errors.New("no valid targets provided")
+	ErrNoInterfacesFound = errors.New("no interfaces found")
 )
 
 const (
@@ -31,70 +33,13 @@ func Command() *cobra.Command {
 func exec(cmd *cobra.Command, args []string) error {
 	targets := target.ParseIPv4(args[0])
 	if len(targets) == 0 {
-		return fmt.Errorf("no valid targets provided")
+		return ErrNoTargetProvided
 	}
 
-	ifaces, err := net.Interfaces()
+	_, err := net.Interfaces()
 	if err != nil {
-		return fmt.Errorf("failed to get interfaces: %w", err)
+		return fmt.Errorf("%w: %w", ErrNoInterfacesFound, err)
 	}
-
-	if len(ifaces) < 2 {
-		return fmt.Errorf("no network interfaces found")
-	}
-
-	iface := ifaces[1]
-	fmt.Printf("Using interface %s\n", iface.Name)
-
-	netFace := network.NewNetworkInterface(iface)
-
-	nw := network.NewNetwork(netFace)
-	defer nw.Close()
-
-	scanner, err := arp_scan.NewARPScanner(nw, targets)
-	if err != nil {
-		return fmt.Errorf("failed to create ARP scanner: %w", err)
-	}
-
-	wg := &sync.WaitGroup{}
-
-	foundHosts, err := startScan(nw, scanner, wg)
-	if err != nil {
-		return fmt.Errorf("failed to start ARP scan: %w", err)
-	}
-
-	if len(foundHosts) == 0 {
-		fmt.Println("No hosts found")
-		return nil
-	}
-
-	fmt.Println(" --- Found Hosts --- ")
-	fmt.Printf("Found %d hosts out of %d:\n", len(foundHosts), len(targets))
-
-	for _, host := range foundHosts {
-		fmt.Printf(" - %s\n", host)
-	}
-
-	wg.Wait()
 
 	return nil
-}
-
-func startScan(nw network.Network, scanner *arp_scan.ARPScanner, wg *sync.WaitGroup) ([]network.Host, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		nw.StartCapture(ctx)
-	}()
-
-	results, err := scanner.Run(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run ARP scanner: %w", err)
-	}
-
-	return results, nil
 }

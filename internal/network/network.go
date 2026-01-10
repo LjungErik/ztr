@@ -2,52 +2,38 @@ package network
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/LjungErik/ztr/internal/log"
-	"github.com/LjungErik/ztr/internal/network/filter"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
 )
 
-// Struct for handling the underlying network packet parsing
-
 const (
-	pcapTimeout = time.Millisecond * 10
+	pcapTimeout time.Duration = 10 * time.Microsecond
 )
 
-var _ Network = (*network)(nil)
-
 type Network interface {
-	RegisterFilter(f filter.NetworkFilter)
-	StartCapture()
-	Close()
-	ProcessNextPacket()
-	Send(data []byte) error
+	StartCapture(bpf string) error
+	ReadNextPacket() (gopacket.Packet, error)
+	SendPacket(data []byte) error
 	NetworkInterface() *NetworkInterface
-	GetFilter(filterType string) (filter.NetworkFilter, bool)
+	Close()
 }
 
 type network struct {
-	handle  *pcap.Handle
-	filters map[string]filter.NetworkFilter
-	iface   *NetworkInterface
+	handle *pcap.Handle
+	iface  *NetworkInterface
 }
 
-func NewNetwork(iface *NetworkInterface) *network {
+func NewNetwork(iface *NetworkInterface) Network {
 	return &network{
-		iface:   iface,
-		filters: make(map[string]filter.NetworkFilter),
-		handle:  nil,
+		iface:  iface,
+		handle: nil,
 	}
 }
 
-func (n *network) RegisterFilter(f filter.NetworkFilter) {
-	n.filters[f.GetType()] = f
-}
-
-func (n *network) StartCapture() {
+func (n *network) StartCapture(bpf string) error {
 	var (
 		err error
 	)
@@ -55,29 +41,25 @@ func (n *network) StartCapture() {
 	if n.handle != nil {
 		log.Debugf("network capture already started")
 
-		return
+		return nil
 	}
 
 	n.handle, err = pcap.OpenLive(n.iface.Name, 1600, true, pcapTimeout)
 	if err != nil {
-		log.Errorf("failed to open interface for live capture: %v", err)
-
-		return
+		return fmt.Errorf("failed to open interface for live capture: %w", err)
 	}
-
-	bpf := joinBPF(n.filters)
 
 	log.Debugf("[%s] Setting up BPF filter: %s", n.iface.Name, bpf)
 
 	err = n.handle.SetBPFFilter(bpf)
 	if err != nil {
-		log.Errorf("failed to setup network filter: %v", err)
-
-		return
+		return fmt.Errorf("failed to setup network filter: %w", err)
 	}
+
+	return nil
 }
 
-func (n *network) ProcessNextPacket() {
+func (n *network) ReadNextPacket() (gopacket.Packet, error) {
 	raw, ci, err := n.handle.ReadPacketData()
 	if err != nil {
 		log.Errorf("failed to read packet data: %v", err)
@@ -88,22 +70,10 @@ func (n *network) ProcessNextPacket() {
 	m.CaptureInfo = ci
 	m.Truncated = m.Truncated || ci.CaptureLength < ci.Length
 
-	for _, f := range n.filters {
-		f.RegisterPacket(packet)
-	}
+	return packet, nil
 }
 
-func (n *network) Close() {
-	log.Debugf("closing network capture")
-	if n.handle != nil {
-		n.handle.Close()
-		log.Debugf("network capture closed")
-	}
-
-	n.handle = nil
-}
-
-func (n *network) Send(data []byte) error {
+func (n *network) SendPacket(data []byte) error {
 	if n.handle == nil {
 		return fmt.Errorf("network capture not started")
 	}
@@ -120,16 +90,12 @@ func (n *network) NetworkInterface() *NetworkInterface {
 	return n.iface
 }
 
-func (n *network) GetFilter(filterType string) (filter.NetworkFilter, bool) {
-	f, ok := n.filters[filterType]
-	return f, ok
-}
-
-func joinBPF(filters map[string]filter.NetworkFilter) string {
-	var bpf []string
-	for _, f := range filters {
-		bpf = append(bpf, f.GetBPF())
+func (n *network) Close() {
+	log.Debugf("closing network capture")
+	if n.handle != nil {
+		n.handle.Close()
+		log.Debugf("network capture closed")
 	}
 
-	return strings.Join(bpf, " or ")
+	n.handle = nil
 }

@@ -1,13 +1,9 @@
 package port
 
 import (
-	"fmt"
 	"net"
-	"sort"
 	"time"
 
-	"github.com/LjungErik/ztr/internal/log"
-	"github.com/LjungErik/ztr/internal/target"
 	"github.com/spf13/cobra"
 )
 
@@ -31,48 +27,9 @@ func Command() *cobra.Command {
 }
 
 func exec(cmd *cobra.Command, args []string) error {
-	targetRange := target.Parse(args[0])
-	if len(targetRange) == 0 {
-		return fmt.Errorf("no valid targets provided")
-	}
-
-	for _, target := range targetRange {
-		openPorts := scanTCPPorts(target, mostCommonPorts_1000)
-
-		if len(openPorts) > 0 {
-			fmt.Printf("Target: %s\n", target)
-			fmt.Printf("%d/%d ports identified\n", len(openPorts), len(mostCommonPorts_1000))
-			fmt.Printf("PORT\tSTATE\n")
-
-			for _, port := range openPorts {
-				fmt.Printf("%d/tcp\topen\n", port)
-			}
-		}
-	}
-
 	return nil
 }
 
 func scanTCPPorts(target net.IP, ports []int) []int {
-	fmt.Printf("Scanning port (%d) for target: %s\n", len(ports), target)
-
-	openPorts := make([]int, 0, len(ports))
-
-	for _, port := range ports {
-		addr := fmt.Sprintf("[%s]:%d", target.String(), port)
-		conn, err := net.DialTimeout("tcp4", addr, defaultTimeout)
-		if err != nil {
-			log.Debugf("Port %d is closed or filtered\n", port)
-			continue
-		}
-		conn.Close()
-
-		openPorts = append(openPorts, port)
-	}
-
-	sort.Slice(openPorts, func(i, j int) bool {
-		return openPorts[i] < openPorts[j]
-	})
-
-	return openPorts
+	return nil
 }
