@@ -14,8 +14,7 @@ const (
 )
 
 type Network interface {
-	StartCapture(bpf string) error
-	ReadNextPacket() (gopacket.Packet, error)
+	StartCapture(bpf string) (*gopacket.PacketSource, error)
 	SendPacket(data []byte) error
 	NetworkInterface() *NetworkInterface
 	Close()
@@ -33,30 +32,30 @@ func NewNetwork(iface *NetworkInterface) Network {
 	}
 }
 
-func (n *network) StartCapture(bpf string) error {
+func (n *network) StartCapture(bpf string) (*gopacket.PacketSource, error) {
 	var (
 		err error
 	)
 
 	if n.handle != nil {
-		log.Debugf("network capture already started")
-
-		return nil
+		return nil, fmt.Errorf("failed to start capture: network capture already started")
 	}
 
 	n.handle, err = pcap.OpenLive(n.iface.Name, 1600, true, pcapTimeout)
 	if err != nil {
-		return fmt.Errorf("failed to open interface for live capture: %w", err)
+		return nil, fmt.Errorf("failed to open interface for live capture: %w", err)
 	}
 
 	log.Debugf("[%s] Setting up BPF filter: %s", n.iface.Name, bpf)
 
 	err = n.handle.SetBPFFilter(bpf)
 	if err != nil {
-		return fmt.Errorf("failed to setup network filter: %w", err)
+		return nil, fmt.Errorf("failed to setup network filter: %w", err)
 	}
 
-	return nil
+	src := gopacket.NewPacketSource(n.handle, n.handle.LinkType())
+
+	return src, nil
 }
 
 func (n *network) ReadNextPacket() (gopacket.Packet, error) {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/network"
@@ -15,14 +17,20 @@ var (
 	ErrContextCancelled = errors.New("context cancelled before IP scan finshed")
 )
 
+const (
+	probeRefreshCheckInterval = 100 * time.Millisecond
+)
+
 type IPScanner interface {
 	Run(ctx context.Context) error
 }
 
 type scanner struct {
-	targets []net.IP
-	nw      network.Network
-	bpf     string
+	targets      []net.IP
+	nw           network.Network
+	bpf          string
+	sendProbes   chan net.IP
+	activeProbes sync.Map
 }
 
 func NewIPScanner(targets []net.IP, nw network.Network) IPScanner {
@@ -34,19 +42,52 @@ func NewIPScanner(targets []net.IP, nw network.Network) IPScanner {
 }
 
 func (s *scanner) Run(ctx context.Context) error {
-	if err := s.nw.StartCapture(s.bpf); err != nil {
+	pktSrc, err := s.nw.StartCapture(s.bpf)
+	if err != nil {
 		return fmt.Errorf("failed to start package capture: %w", err)
 	}
 
 	defer s.nw.Close()
 
+	for _, target := range s.targets {
+		s.activeProbes.Store(target.String(), &TargetState{
+			Confirmed: false,
+			LastSent:  time.Time{},
+			IP:        target,
+			Retries:   -1,
+		})
+	}
+
+	packets := pktSrc.Packets()
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		s.trackActiveProbes(ctx)
+		wg.Done()
+	}()
+
+	if err = s.run(ctx, packets); err != nil {
+		return fmt.Errorf("failed to listen for packet: %w", err)
+	}
+
+	wg.Wait()
+
+	return nil
+}
+
+func (s *scanner) run(ctx context.Context, packets chan gopacket.Packet) error {
 	for !s.hasFinished() {
 		select {
 		case <-ctx.Done():
 			return ErrContextCancelled
-		default:
-			if err := s.run(ctx); err != nil {
-				log.Errorf("IP Scan returned with error: %v", err)
+		case packet := <-packets:
+			if err := s.handlePacket(packet); err != nil {
+				log.Debugf("Failed to handle package: %w", err)
+			}
+		case probTarget := <-s.sendProbes:
+			if err := s.sendProbe(probTarget); err != nil {
+				log.Debugf("Failed to send probe: %w", err)
 			}
 		}
 	}
@@ -54,21 +95,36 @@ func (s *scanner) Run(ctx context.Context) error {
 	return nil
 }
 
-func (s *scanner) run(_ context.Context) error {
-	packet, err := s.nw.ReadNextPacket()
-	if err != nil {
-		return fmt.Errorf("failed to read next package: %w", err)
-	}
+func (s *scanner) trackActiveProbes(ctx context.Context) {
+	s.resendCheck()
 
-	if err = s.handlePacket(packet); err != nil {
-		return fmt.Errorf("failed to handle packet: %w", err)
-	}
+	ticker := time.NewTicker(probeRefreshCheckInterval)
 
-	if err = s.sendNextBatch(); err != nil {
-		return fmt.Errorf("failed to send next batch: %w", err)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debugf("context has cancelled, stopping active probe tracking")
+		case <-ticker.C:
+			s.resendCheck()
+		}
 	}
+}
 
-	return nil
+func (s *scanner) resendCheck() {
+	s.activeProbes.Range(func(key, value interface{}) bool {
+		state := value.(*TargetState)
+		if !state.Confirmed && time.Since(state.LastSent) > retryInterval {
+			if state.Retries < maxRetries {
+				state.Retries++
+				state.LastSent = time.Now()
+				s.sendProbes <- state.IP
+			} else {
+				s.activeProbes.Delete(key)
+			}
+		}
+
+		return true
+	})
 }
 
 func (s *scanner) handlePacket(packet gopacket.Packet) error {
@@ -77,7 +133,7 @@ func (s *scanner) handlePacket(packet gopacket.Packet) error {
 	return nil
 }
 
-func (s *scanner) sendNextBatch() error {
+func (s *scanner) sendProbe(target net.IP) error {
 	return nil
 }
 
