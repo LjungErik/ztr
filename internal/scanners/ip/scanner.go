@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/LjungErik/ztr/internal/log"
 	"github.com/LjungErik/ztr/internal/network"
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 )
 
 var (
@@ -23,6 +25,7 @@ const (
 
 type IPScanner interface {
 	Run(ctx context.Context) error
+	Results() []TargetResult
 }
 
 type scanner struct {
@@ -31,13 +34,20 @@ type scanner struct {
 	bpf          string
 	sendProbes   chan net.IP
 	activeProbes sync.Map
+	results      map[string]TargetResult
+	sourceIP     net.IP
+	sourceHwAddr net.HardwareAddr
 }
 
 func NewIPScanner(targets []net.IP, nw network.Network) IPScanner {
+	iface := nw.NetworkInterface()
+
 	return &scanner{
-		targets: targets,
-		nw:      nw,
-		bpf:     "",
+		targets:      targets,
+		nw:           nw,
+		bpf:          "arp",
+		sourceIP:     iface.GetIPv4(),
+		sourceHwAddr: iface.GetHwAddress(),
 	}
 }
 
@@ -74,6 +84,20 @@ func (s *scanner) Run(ctx context.Context) error {
 	wg.Wait()
 
 	return nil
+}
+
+func (s *scanner) Results() []TargetResult {
+	var out = make([]TargetResult, 0, len(s.results))
+
+	for _, v := range s.results {
+		out = append(out, v)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].IP.String() < out[j].IP.String()
+	})
+
+	return out
 }
 
 func (s *scanner) run(ctx context.Context, packets chan gopacket.Packet) error {
@@ -128,15 +152,43 @@ func (s *scanner) resendCheck() {
 }
 
 func (s *scanner) handlePacket(packet gopacket.Packet) error {
-	// Check package type
+	// For now we only support ARP
+	if arpLayer := packet.Layer(layers.LayerTypeARP); arpLayer != nil {
+		arp := arpLayer.(*layers.ARP)
+		key := string(arp.SourceProtAddress)
+		val, ok := s.results[key]
+		if !ok {
+			val = TargetResult{
+				IP:             arp.SourceProtAddress,
+				CompletedScans: 0,
+			}
+		}
+
+		val.HwAddr = arp.SourceHwAddress
+		val.CompletedScans = val.CompletedScans | ARPScan
+
+		s.results[key] = val
+	}
 
 	return nil
 }
 
 func (s *scanner) sendProbe(target net.IP) error {
+	// Only send ARP requests for now
+	arp := NewARPRequest(s.sourceIP, target, s.sourceHwAddr)
+
+	payload, err := arp.Marshal()
+	if err != nil {
+		return fmt.Errorf("failed to marshal ARP request: %w", err)
+	}
+
+	if err := s.nw.SendPacket(payload); err != nil {
+		return fmt.Errorf("failed to send package: %w", err)
+	}
+
 	return nil
 }
 
 func (s *scanner) hasFinished() bool {
-	return false
+	return len(s.results) == len(s.targets)
 }
